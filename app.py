@@ -15,8 +15,6 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 import google.generativeai as genai
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
 import sqlite3
 import hashlib
 import logging
@@ -31,7 +29,6 @@ CORS(app)
 
 # Configuration
 GEMINI_API_KEY = "AIzaSyDhA1h0gy_wffS20ThP1z2h9xo8XTDeB5Y"
-GOOGLE_EMAIL = "dhruvshah9197@gmail.com"
 USER_NAME = "Dhruvin Shah"
 
 # Initialize Gemini
@@ -114,7 +111,7 @@ class Remote100Scraper(JobScraper):
                 data = response.json()
                 for job in data[:30]:
                     if any(role in job.get('title', '').lower() 
-                           for role in ['manager', 'operations', 'compliance', 'risk']):
+                           for role in ['manager', 'operations', 'compliance', 'risk', 'fintech', 'saas']):
                         jobs.append({
                             'title': job.get('title', ''),
                             'company': job.get('company_name', ''),
@@ -165,143 +162,93 @@ class IndeedScraper(JobScraper):
         
         return jobs
 
-class GitLabScraper(JobScraper):
-    """GitLab scraper"""
-    
-    def scrape(self):
-        jobs = []
-        try:
-            url = "https://about.gitlab.com/jobs/"
-            response = requests.get(url, headers=self.headers, timeout=10)
-            
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, 'html.parser')
-                job_links = soup.find_all('a', class_='posting-title')
-                
-                for link in job_links[:15]:
-                    try:
-                        title = link.get_text(strip=True)
-                        if any(role in title.lower() for role in ['manager', 'operations', 'compliance']):
-                            jobs.append({
-                                'title': title,
-                                'company': 'GitLab',
-                                'location': 'Remote',
-                                'salary': 'Competitive',
-                                'description': '',
-                                'url': link.get('href', ''),
-                                'source': 'GitLab',
-                            })
-                    except:
-                        continue
-        except Exception as e:
-            logger.error(f"GitLab scraping error: {e}")
-        
-        return jobs
-
-# ============================================================================
-# AI CUSTOMIZATION
-# ============================================================================
-
-def extract_keywords(description):
-    """Extract keywords from job description"""
-    try:
-        prompt = f"""Extract 10 key skills and requirements from this job description.
-        Return as comma-separated list only.
-        
-        {description}"""
-        response = gemini_model.generate_content(prompt)
-        return response.text.split(',')[:10]
-    except:
-        return []
-
-def customize_cv(job_title, company, keywords):
-    """Generate customized CV for job"""
-    try:
-        prompt = f"""Create an ATS-optimized CV section for {USER_NAME} applying to {job_title} at {company}.
-        
-        Key requirements: {', '.join(keywords)}
-        
-        Include:
-        - Professional summary (2 lines)
-        - 3 relevant achievements
-        - Key skills matching the role
-        
-        Keep it concise and professional."""
-        
-        response = gemini_model.generate_content(prompt)
-        return response.text
-    except:
-        return "Professional CV section"
-
-def generate_cover_letter(job_title, company, keywords):
-    """Generate personalized cover letter"""
-    try:
-        prompt = f"""Write a compelling 3-paragraph cover letter for {USER_NAME} applying to {job_title} at {company}.
-        
-        Key requirements: {', '.join(keywords)}
-        
-        Make it:
-        - Personalized to the role
-        - Professional and concise
-        - Highlighting relevant experience"""
-        
-        response = gemini_model.generate_content(prompt)
-        return response.text
-    except:
-        return "Dear Hiring Manager,\n\nI am interested in this position..."
-
 # ============================================================================
 # JOB AGGREGATION
 # ============================================================================
 
-def scrape_all_jobs():
-    """Scrape jobs from all sources"""
-    logger.info("Starting job scraping...")
+class JobAggregator:
+    """Aggregates jobs from multiple sources"""
     
-    scrapers = [
-        RemoteOKScraper(),
-        Remote100Scraper(),
-        IndeedScraper(),
-        GitLabScraper(),
-    ]
+    def __init__(self):
+        self.scrapers = [
+            RemoteOKScraper(),
+            Remote100Scraper(),
+            IndeedScraper(),
+        ]
+        self.all_jobs = []
     
-    all_jobs = []
-    for scraper in scrapers:
-        try:
-            jobs = scraper.scrape()
-            all_jobs.extend(jobs)
-            logger.info(f"Found {len(jobs)} jobs from {scraper.__class__.__name__}")
-            time.sleep(2)
-        except Exception as e:
-            logger.error(f"Error with {scraper.__class__.__name__}: {e}")
-    
-    return all_jobs
-
-def filter_and_rank_jobs(jobs):
-    """Filter and rank jobs"""
-    filtered = []
-    
-    for job in jobs:
-        # Check if matches criteria
-        title_match = any(role in job.get('title', '').lower() 
-                         for role in ['manager', 'operations', 'compliance', 'risk', 'fintech', 'saas'])
-        location_match = any(loc in job.get('location', '').lower() 
-                            for loc in ['remote', 'finland', 'europe', 'uae'])
+    def scrape_all(self) -> list:
+        """Scrape from all sources"""
+        logger.info("Starting job scraping from all sources...")
         
-        if title_match and location_match:
-            # Calculate match score
-            score = 0
-            if 'remote' in job.get('location', '').lower():
-                score += 20
-            if 'finland' in job.get('location', '').lower():
-                score += 30
-            
-            job['match_score'] = min(score + 50, 100)
-            filtered.append(job)
+        for scraper in self.scrapers:
+            try:
+                jobs = scraper.scrape()
+                self.all_jobs.extend(jobs)
+                logger.info(f"Found {len(jobs)} jobs from {scraper.__class__.__name__}")
+                time.sleep(2)
+            except Exception as e:
+                logger.error(f"Error with {scraper.__class__.__name__}: {e}")
+        
+        logger.info(f"Total jobs found: {len(self.all_jobs)}")
+        return self.all_jobs
     
-    # Sort by match score
-    filtered.sort(key=lambda x: x.get('match_score', 0), reverse=True)
-    return filtered
+    def filter_jobs(self, jobs: list) -> list:
+        """Filter jobs by criteria"""
+        filtered = []
+        
+        for job in jobs:
+            title_match = any(role.lower() in job.get('title', '').lower() 
+                            for role in ['manager', 'operations', 'compliance', 'risk', 'fintech', 'saas'])
+            
+            location = job.get('location', '').lower()
+            location_match = any(loc.lower() in location 
+                               for loc in ['remote', 'finland', 'europe', 'uae'])
+            
+            if title_match and location_match:
+                filtered.append(job)
+        
+        logger.info(f"Filtered to {len(filtered)} matching jobs")
+        return filtered
+    
+    def deduplicate_jobs(self, jobs: list) -> list:
+        """Remove duplicate jobs"""
+        seen = set()
+        unique = []
+        
+        for job in jobs:
+            job_hash = hashlib.md5(
+                f"{job.get('title', '')}{job.get('company', '')}".encode()
+            ).hexdigest()
+            
+            if job_hash not in seen:
+                seen.add(job_hash)
+                unique.append(job)
+        
+        logger.info(f"After deduplication: {len(unique)} unique jobs")
+        return unique
+    
+    def rank_jobs(self, jobs: list) -> list:
+        """Rank jobs by match score"""
+        for job in jobs:
+            score = 50
+            
+            title = job.get('title', '').lower()
+            if 'revenue' in title or 'operations' in title:
+                score += 20
+            if 'compliance' in title or 'risk' in title:
+                score += 15
+            
+            location = job.get('location', '').lower()
+            if 'finland' in location:
+                score += 15
+            elif 'remote' in location:
+                score += 10
+            
+            job['match_score'] = min(score, 100)
+        
+        jobs.sort(key=lambda x: x.get('match_score', 0), reverse=True)
+        return jobs
 
 def save_jobs_to_db(jobs):
     """Save jobs to database"""
@@ -311,15 +258,9 @@ def save_jobs_to_db(jobs):
     for job in jobs:
         job_id = hashlib.md5(f"{job.get('title')}{job.get('company')}".encode()).hexdigest()
         
-        # Check if already exists
         c.execute('SELECT id FROM jobs WHERE id = ?', (job_id,))
         if c.fetchone():
             continue
-        
-        # Extract keywords and customize
-        keywords = extract_keywords(job.get('description', job.get('title', '')))
-        customized_cv = customize_cv(job.get('title', ''), job.get('company', ''), keywords)
-        cover_letter = generate_cover_letter(job.get('title', ''), job.get('company', ''), keywords)
         
         c.execute('''INSERT INTO jobs 
                      (id, company, position, location, salary, source, url, description, 
@@ -328,7 +269,7 @@ def save_jobs_to_db(jobs):
                   (job_id, job.get('company', ''), job.get('title', ''), 
                    job.get('location', ''), job.get('salary', ''), job.get('source', ''),
                    job.get('url', ''), job.get('description', ''), job.get('match_score', 0),
-                   customized_cv, cover_letter, 'Not Applied', datetime.now().isoformat()))
+                   '', '', 'Not Applied', datetime.now().isoformat()))
     
     conn.commit()
     conn.close()
@@ -384,14 +325,17 @@ def trigger_scrape():
     """Trigger job scraping"""
     try:
         logger.info("Manual scrape triggered")
-        jobs = scrape_all_jobs()
-        filtered_jobs = filter_and_rank_jobs(jobs)
-        save_jobs_to_db(filtered_jobs)
+        aggregator = JobAggregator()
+        jobs = aggregator.scrape_all()
+        filtered_jobs = aggregator.filter_jobs(jobs)
+        unique_jobs = aggregator.deduplicate_jobs(filtered_jobs)
+        ranked_jobs = aggregator.rank_jobs(unique_jobs)
+        save_jobs_to_db(ranked_jobs)
         
         return jsonify({
             'success': True,
-            'jobs_found': len(filtered_jobs),
-            'message': f'Found {len(filtered_jobs)} new jobs!'
+            'jobs_found': len(ranked_jobs),
+            'message': f'Found {len(ranked_jobs)} new jobs!'
         })
     except Exception as e:
         logger.error(f"Scrape error: {e}")
@@ -426,39 +370,9 @@ def get_stats():
     })
 
 # ============================================================================
-# SCHEDULER
-# ============================================================================
-
-def scheduled_scrape():
-    """Scheduled job scraping"""
-    logger.info("Running scheduled scrape at 9 AM")
-    try:
-        jobs = scrape_all_jobs()
-        filtered_jobs = filter_and_rank_jobs(jobs)
-        save_jobs_to_db(filtered_jobs)
-        logger.info(f"Scheduled scrape completed: {len(filtered_jobs)} jobs")
-    except Exception as e:
-        logger.error(f"Scheduled scrape error: {e}")
-
-def run_scheduler():
-    """Run scheduler in background"""
-    schedule.every().day.at("09:00").do(scheduled_scrape)
-    
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
-
-# ============================================================================
 # MAIN
 # ============================================================================
 
 if __name__ == '__main__':
-    # Initialize database
     init_db()
-    
-    # Start scheduler in background thread
-    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-    scheduler_thread.start()
-    
-    # Run Flask app
-    app.run(debug=True, port=5000)
+    app.run(debug=False, port=int(os.environ.get('PORT', 5000)))
