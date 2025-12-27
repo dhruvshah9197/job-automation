@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: job-automation
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: GEMINI_API_KEY
+        value: AIzaSyDhA1h0gy_wffS20ThP1z2h9xo8XTDeB5Y
+      - key: PYTHON_VERSION
+        value: 3.11.0
