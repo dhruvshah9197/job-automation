@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Autonomous Job Finder + AI CV Customizer
-Finds jobs, customizes materials, tracks everything
+Job Finder + AI CV Customizer - Using Serpapi for job search
 """
 
 from flask import Flask, render_template, jsonify, request
@@ -45,136 +44,107 @@ def get_db_connection():
     return conn
 
 # ============================================================================
-# JOB FINDING - Using Working APIs
+# JOB FINDING - Direct API Calls
 # ============================================================================
 
-def find_jobs_from_apis():
-    """Find jobs from multiple working APIs"""
+def find_jobs():
+    """Find jobs using multiple free sources"""
     all_jobs = []
     
-    # RemoteOK API - WORKS
+    # Try RemoteOK - most reliable
     try:
-        logger.info("Searching RemoteOK...")
-        url = "https://remoteok.com/api/jobs?tag=fintech,saas,operations,compliance"
-        response = requests.get(url, timeout=15)
+        logger.info("Fetching from RemoteOK...")
+        url = "https://remoteok.com/api/jobs"
+        response = requests.get(url, timeout=20)
         if response.status_code == 200:
             data = response.json()
-            for job in data[:100]:
+            count = 0
+            for job in data:
                 if isinstance(job, dict) and 'title' in job and 'company' in job:
-                    all_jobs.append({
-                        'title': job.get('title', ''),
-                        'company': job.get('company', ''),
-                        'location': job.get('location', 'Remote'),
-                        'salary': job.get('salary', ''),
-                        'description': job.get('description', ''),
-                        'url': job.get('url', ''),
-                        'source': 'RemoteOK',
-                    })
-            logger.info(f"RemoteOK: {len([j for j in all_jobs if j['source']=='RemoteOK'])} jobs")
+                    # Filter for your criteria
+                    title = job.get('title', '').lower()
+                    location = job.get('location', '').lower()
+                    
+                    keywords = ['operations', 'compliance', 'risk', 'fintech', 'saas', 'manager', 'revenue', 'customer success']
+                    if any(kw in title for kw in keywords) and ('remote' in location or 'worldwide' in location):
+                        all_jobs.append({
+                            'title': job.get('title', ''),
+                            'company': job.get('company', ''),
+                            'location': job.get('location', 'Remote'),
+                            'salary': job.get('salary', ''),
+                            'description': job.get('description', ''),
+                            'url': job.get('url', ''),
+                            'source': 'RemoteOK',
+                        })
+                        count += 1
+                        if count >= 50:
+                            break
+            logger.info(f"RemoteOK: Found {count} matching jobs")
     except Exception as e:
         logger.error(f"RemoteOK error: {e}")
     
-    time.sleep(2)
+    time.sleep(1)
     
-    # Remote100 API - WORKS
+    # Try Remote100
     try:
-        logger.info("Searching Remote100...")
+        logger.info("Fetching from Remote100...")
         url = "https://remote100.co/api/jobs"
-        response = requests.get(url, timeout=15)
+        response = requests.get(url, timeout=20)
         if response.status_code == 200:
             data = response.json()
-            for job in data[:100]:
+            count = 0
+            for job in data:
                 if isinstance(job, dict) and 'title' in job:
-                    all_jobs.append({
-                        'title': job.get('title', ''),
-                        'company': job.get('company_name', 'Unknown'),
-                        'location': 'Remote',
-                        'salary': job.get('salary', ''),
-                        'description': job.get('description', ''),
-                        'url': job.get('url', ''),
-                        'source': 'Remote100',
-                    })
-            logger.info(f"Remote100: {len([j for j in all_jobs if j['source']=='Remote100'])} jobs")
+                    title = job.get('title', '').lower()
+                    keywords = ['operations', 'compliance', 'risk', 'fintech', 'saas', 'manager', 'revenue', 'customer success']
+                    if any(kw in title for kw in keywords):
+                        all_jobs.append({
+                            'title': job.get('title', ''),
+                            'company': job.get('company_name', 'Unknown'),
+                            'location': 'Remote',
+                            'salary': job.get('salary', ''),
+                            'description': job.get('description', ''),
+                            'url': job.get('url', ''),
+                            'source': 'Remote100',
+                        })
+                        count += 1
+                        if count >= 50:
+                            break
+            logger.info(f"Remote100: Found {count} matching jobs")
     except Exception as e:
         logger.error(f"Remote100 error: {e}")
     
-    time.sleep(2)
+    time.sleep(1)
     
-    # Hacker News Who's Hiring - WORKS
+    # Try Wellfound
     try:
-        logger.info("Searching Hacker News...")
-        url = "https://news.ycombinator.com/jobs"
-        response = requests.get(url, timeout=15)
-        if response.status_code == 200:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(response.content, 'html.parser')
-            rows = soup.find_all('tr', class_='athing')
-            for row in rows[:50]:
-                try:
-                    title_elem = row.find('span', class_='titleline')
-                    if title_elem:
-                        title = title_elem.get_text(strip=True)
-                        if any(kw in title.lower() for kw in ['remote', 'operations', 'compliance', 'fintech']):
-                            all_jobs.append({
-                                'title': title,
-                                'company': 'HN Job',
-                                'location': 'Remote',
-                                'salary': '',
-                                'description': '',
-                                'url': title_elem.find('a').get('href', '') if title_elem.find('a') else '',
-                                'source': 'Hacker News',
-                            })
-                except:
-                    continue
-            logger.info(f"Hacker News: {len([j for j in all_jobs if j['source']=='Hacker News'])} jobs")
-    except Exception as e:
-        logger.error(f"Hacker News error: {e}")
-    
-    time.sleep(2)
-    
-    # GitHub Jobs API - WORKS
-    try:
-        logger.info("Searching GitHub Jobs...")
-        url = "https://jobs.github.com/positions.json"
-        params = {'description': 'operations', 'location': 'remote'}
-        response = requests.get(url, params=params, timeout=15)
+        logger.info("Fetching from Wellfound...")
+        url = "https://api.wellfound.com/jobs"
+        params = {'tags': 'fintech,saas', 'remote': 'true', 'limit': 50}
+        response = requests.get(url, params=params, timeout=20)
         if response.status_code == 200:
             data = response.json()
-            for job in data[:50]:
+            count = 0
+            for job in data.get('jobs', []):
                 if isinstance(job, dict) and 'title' in job:
                     all_jobs.append({
                         'title': job.get('title', ''),
-                        'company': job.get('company', ''),
-                        'location': job.get('location', 'Remote'),
+                        'company': job.get('startup', {}).get('name', 'Unknown'),
+                        'location': 'Remote',
                         'salary': '',
                         'description': job.get('description', ''),
                         'url': job.get('url', ''),
-                        'source': 'GitHub Jobs',
+                        'source': 'Wellfound',
                     })
-            logger.info(f"GitHub Jobs: {len([j for j in all_jobs if j['source']=='GitHub Jobs'])} jobs")
+                    count += 1
+                    if count >= 50:
+                        break
+            logger.info(f"Wellfound: Found {count} matching jobs")
     except Exception as e:
-        logger.error(f"GitHub Jobs error: {e}")
+        logger.error(f"Wellfound error: {e}")
     
-    logger.info(f"Total jobs found: {len(all_jobs)}")
+    logger.info(f"Total jobs collected: {len(all_jobs)}")
     return all_jobs
-
-def filter_jobs(jobs):
-    """Filter by criteria"""
-    filtered = []
-    keywords = ['operations', 'compliance', 'risk', 'fintech', 'saas', 'manager', 'revenue', 'customer success']
-    
-    for job in jobs:
-        title = job.get('title', '').lower()
-        location = job.get('location', '').lower()
-        
-        title_match = any(kw in title for kw in keywords)
-        location_match = any(loc in location for loc in ['remote', 'finland', 'europe', 'uae', 'anywhere'])
-        
-        if title_match and location_match:
-            filtered.append(job)
-    
-    logger.info(f"Filtered to {len(filtered)} jobs")
-    return filtered
 
 def deduplicate(jobs):
     """Remove duplicates"""
@@ -202,12 +172,8 @@ def rank_jobs(jobs):
             score += 15
         if 'manager' in title:
             score += 10
-        
-        location = job.get('location', '').lower()
-        if 'finland' in location:
-            score += 15
-        elif 'remote' in location:
-            score += 10
+        if 'senior' in title:
+            score += 5
         
         job['match_score'] = min(score, 100)
     
@@ -219,41 +185,38 @@ def customize_cv_for_job(job_title, company, description):
     try:
         prompt = f"""Create an ATS-optimized CV section for Dhruvin Shah applying to {job_title} at {company}.
 
-Job Description: {description[:500]}
+Job Description: {description[:300] if description else 'N/A'}
 
 Include:
-- Professional summary (2 lines)
-- 3 relevant achievements
+- Professional summary (1-2 lines)
+- 2-3 relevant achievements
 - Key skills matching the role
 
-Keep it concise and professional."""
+Keep it concise."""
         
         response = gemini_model.generate_content(prompt)
-        return response.text
+        return response.text if response else ""
     except Exception as e:
-        logger.error(f"CV customization error: {e}")
+        logger.error(f"CV error: {e}")
         return ""
 
 def generate_cover_letter(job_title, company, description):
     """AI generates cover letter"""
     try:
-        prompt = f"""Write a compelling 3-paragraph cover letter for Dhruvin Shah applying to {job_title} at {company}.
+        prompt = f"""Write a 3-paragraph cover letter for Dhruvin Shah applying to {job_title} at {company}.
 
-Job Description: {description[:500]}
+Job Description: {description[:300] if description else 'N/A'}
 
-Make it:
-- Personalized to the role
-- Professional and concise
-- Highlighting relevant experience"""
+Make it professional, concise, and personalized."""
         
         response = gemini_model.generate_content(prompt)
-        return response.text
+        return response.text if response else ""
     except Exception as e:
-        logger.error(f"Cover letter error: {e}")
+        logger.error(f"Letter error: {e}")
         return ""
 
 def save_jobs(jobs):
-    """Save to database"""
+    """Save to database with AI customization"""
     conn = get_db_connection()
     c = conn.cursor()
     
@@ -263,6 +226,8 @@ def save_jobs(jobs):
         c.execute('SELECT id FROM jobs WHERE id = ?', (job_id,))
         if c.fetchone():
             continue
+        
+        logger.info(f"Customizing: {job.get('title')} at {job.get('company')}")
         
         # Generate customized materials
         cv = customize_cv_for_job(job.get('title', ''), job.get('company', ''), job.get('description', ''))
@@ -276,6 +241,8 @@ def save_jobs(jobs):
                    job.get('location', ''), job.get('salary', ''), job.get('source', ''),
                    job.get('url', ''), job.get('description', ''), job.get('match_score', 0),
                    cv, letter, 'Not Applied', datetime.now().isoformat()))
+        
+        time.sleep(0.5)  # Rate limit Gemini
     
     conn.commit()
     conn.close()
@@ -323,17 +290,23 @@ def update_status(job_id):
 @app.route('/api/scrape', methods=['POST'])
 def trigger_scrape():
     try:
-        logger.info("Scraping jobs...")
-        jobs = find_jobs_from_apis()
-        filtered = filter_jobs(jobs)
-        unique = deduplicate(filtered)
+        logger.info("=== STARTING JOB SEARCH ===")
+        jobs = find_jobs()
+        logger.info(f"Found {len(jobs)} jobs total")
+        
+        if len(jobs) == 0:
+            return jsonify({'success': False, 'error': 'No jobs found', 'jobs_found': 0})
+        
+        unique = deduplicate(jobs)
         ranked = rank_jobs(unique)
+        
+        logger.info(f"Saving {len(ranked)} jobs with AI customization...")
         save_jobs(ranked)
         
         return jsonify({
             'success': True,
             'jobs_found': len(ranked),
-            'message': f'Found {len(ranked)} jobs with customized CV & cover letters!'
+            'message': f'Found {len(ranked)} jobs! CV & cover letters customized with AI.'
         })
     except Exception as e:
         logger.error(f"Scrape error: {e}")
