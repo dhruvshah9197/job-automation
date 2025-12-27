@@ -162,6 +162,214 @@ class IndeedScraper(JobScraper):
         
         return jobs
 
+class GitLabScraper(JobScraper):
+    """GitLab jobs scraper"""
+    
+    def scrape(self):
+        jobs = []
+        try:
+            url = "https://about.gitlab.com/jobs/"
+            response = requests.get(url, headers=self.headers, timeout=10)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                job_links = soup.find_all('a', class_='posting-title')
+                
+                for link in job_links[:15]:
+                    try:
+                        title = link.get_text(strip=True)
+                        if any(role in title.lower() for role in ['manager', 'operations', 'compliance']):
+                            jobs.append({
+                                'title': title,
+                                'company': 'GitLab',
+                                'location': 'Remote',
+                                'salary': 'Competitive',
+                                'description': '',
+                                'url': link.get('href', ''),
+                                'source': 'GitLab',
+                            })
+                    except:
+                        continue
+        except Exception as e:
+            logger.error(f"GitLab scraping error: {e}")
+        
+        return jobs
+
+class WellfoundScraper(JobScraper):
+    """Wellfound (AngelList) jobs scraper"""
+    
+    def scrape(self):
+        jobs = []
+        try:
+            url = "https://wellfound.com/jobs"
+            response = requests.get(url, headers=self.headers, timeout=10)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                job_items = soup.find_all('div', class_='job-item')
+                
+                for item in job_items[:15]:
+                    try:
+                        title_elem = item.find('h3')
+                        company_elem = item.find('span', class_='company-name')
+                        
+                        if title_elem and company_elem:
+                            jobs.append({
+                                'title': title_elem.get_text(strip=True),
+                                'company': company_elem.get_text(strip=True),
+                                'location': 'Remote',
+                                'salary': 'Not specified',
+                                'description': '',
+                                'url': item.find('a', href=True).get('href', '') if item.find('a', href=True) else '',
+                                'source': 'Wellfound',
+                            })
+                    except:
+                        continue
+        except Exception as e:
+            logger.error(f"Wellfound scraping error: {e}")
+        
+        return jobs
+
+class ContraScraper(JobScraper):
+    """Contra jobs scraper"""
+    
+    def scrape(self):
+        jobs = []
+        try:
+            url = "https://contra.com/search/jobs"
+            response = requests.get(url, headers=self.headers, timeout=10)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                job_items = soup.find_all('div', class_='job-card')
+                
+                for item in job_items[:15]:
+                    try:
+                        title_elem = item.find('h3')
+                        company_elem = item.find('span', class_='company')
+                        
+                        if title_elem:
+                            jobs.append({
+                                'title': title_elem.get_text(strip=True),
+                                'company': company_elem.get_text(strip=True) if company_elem else 'Freelance',
+                                'location': 'Remote',
+                                'salary': 'Varies',
+                                'description': '',
+                                'url': item.find('a', href=True).get('href', '') if item.find('a', href=True) else '',
+                                'source': 'Contra',
+                            })
+                    except:
+                        continue
+        except Exception as e:
+            logger.error(f"Contra scraping error: {e}")
+        
+        return jobs
+
+class CareerJetScraper(JobScraper):
+    """CareerJet jobs scraper"""
+    
+    def scrape(self):
+        jobs = []
+        try:
+            url = "https://www.careerjet.com/search/jobs?s=revenue+operations&l=remote"
+            response = requests.get(url, headers=self.headers, timeout=10)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                job_items = soup.find_all('div', class_='job')
+                
+                for item in job_items[:15]:
+                    try:
+                        title_elem = item.find('h2')
+                        company_elem = item.find('span', class_='company')
+                        
+                        if title_elem:
+                            jobs.append({
+                                'title': title_elem.get_text(strip=True),
+                                'company': company_elem.get_text(strip=True) if company_elem else 'Unknown',
+                                'location': 'Remote',
+                                'salary': 'Not specified',
+                                'description': '',
+                                'url': item.find('a', href=True).get('href', '') if item.find('a', href=True) else '',
+                                'source': 'CareerJet',
+                            })
+                    except:
+                        continue
+        except Exception as e:
+            logger.error(f"CareerJet scraping error: {e}")
+        
+        return jobs
+
+class SimplyHiredScraper(JobScraper):
+    """SimplyHired jobs scraper"""
+    
+    def scrape(self):
+        jobs = []
+        try:
+            url = "https://www.simplyhired.com/search?q=revenue+operations&l=remote"
+            response = requests.get(url, headers=self.headers, timeout=10)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                job_items = soup.find_all('div', class_='job-item')
+                
+                for item in job_items[:15]:
+                    try:
+                        title_elem = item.find('h2')
+                        company_elem = item.find('span', class_='company')
+                        
+                        if title_elem:
+                            jobs.append({
+                                'title': title_elem.get_text(strip=True),
+                                'company': company_elem.get_text(strip=True) if company_elem else 'Unknown',
+                                'location': 'Remote',
+                                'salary': 'Not specified',
+                                'description': '',
+                                'url': item.find('a', href=True).get('href', '') if item.find('a', href=True) else '',
+                                'source': 'SimplyHired',
+                            })
+                    except:
+                        continue
+        except Exception as e:
+            logger.error(f"SimplyHired scraping error: {e}")
+        
+        return jobs
+
+class WorkingNomadsScraper(JobScraper):
+    """Working Nomads jobs scraper"""
+    
+    def scrape(self):
+        jobs = []
+        try:
+            url = "https://www.workingnomads.co/jobs"
+            response = requests.get(url, headers=self.headers, timeout=10)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
+                job_items = soup.find_all('div', class_='job')
+                
+                for item in job_items[:15]:
+                    try:
+                        title_elem = item.find('h3')
+                        company_elem = item.find('span', class_='company')
+                        
+                        if title_elem:
+                            jobs.append({
+                                'title': title_elem.get_text(strip=True),
+                                'company': company_elem.get_text(strip=True) if company_elem else 'Unknown',
+                                'location': 'Remote',
+                                'salary': 'Not specified',
+                                'description': '',
+                                'url': item.find('a', href=True).get('href', '') if item.find('a', href=True) else '',
+                                'source': 'Working Nomads',
+                            })
+                    except:
+                        continue
+        except Exception as e:
+            logger.error(f"Working Nomads scraping error: {e}")
+        
+        return jobs
+
 # ============================================================================
 # JOB AGGREGATION
 # ============================================================================
@@ -174,6 +382,12 @@ class JobAggregator:
             RemoteOKScraper(),
             Remote100Scraper(),
             IndeedScraper(),
+            GitLabScraper(),
+            WellfoundScraper(),
+            ContraScraper(),
+            CareerJetScraper(),
+            SimplyHiredScraper(),
+            WorkingNomadsScraper(),
         ]
         self.all_jobs = []
     
